@@ -1,0 +1,6 @@
+.env
+.runtime.env
+*.log
+
+# up.sh/seed.sh's own state — not something a fresh clone should start with.
+.seed-state/

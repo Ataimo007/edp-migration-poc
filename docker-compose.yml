@@ -1,0 +1,177 @@
+# Full Tyk stack + Keycloak + the edp-migration tool, for the EDP Migration
+# POC (see README.md). Host ports all default to exactly what
+# edp-migrate's own Setup wizard prefills out of the box (see
+# ../internal/config/config.go's DefaultLocalConfig) — leave the *_HOST_PORT
+# variables at their defaults and the migration tool needs zero manual
+# configuration to find this stack.
+services:
+  tyk-postgres:
+    image: postgres:18
+    environment:
+      - POSTGRES_DB=tyk_analytics
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=topsecretpassword
+      - PGDATA=/var/lib/postgresql/18/docker
+    ports:
+      - "${POSTGRES_HOST_PORT:-15432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql
+      # Only runs against a freshly-initialized (empty) data volume — creates
+      # the tyk_portal and keycloak databases that POSTGRES_DB above doesn't
+      # (see postgres-init/01-create-databases.sql). If you hit "mounts
+      # denied ... not shared from the host" on Docker Desktop, add this
+      # repo's path to Preferences > Resources > File Sharing, then retry.
+      - ./postgres-init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - tyk
+
+  tyk-redis:
+    image: redis
+    ports:
+      - "${REDIS_HOST_PORT:-16379}:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - tyk
+
+  tyk-gateway:
+    image: tykio/tyk-gateway-ee:${GATEWAY_VERSION:-v5.13.2}
+    ports:
+      - "${GATEWAY_HOST_PORT:-18080}:8080"
+    env_file:
+      - ./confs/tyk.env
+    depends_on:
+      - tyk-dashboard
+    networks:
+      - tyk
+
+  tyk-dashboard:
+    image: tykio/tyk-dashboard:${DASHBOARD_VERSION:-v5.13.2}
+    environment:
+      - TYK_DB_LICENSEKEY=${DASH_LICENSE:?Dashboard license missing — copy .env.example to .env and set DASH_LICENSE (see README.md prerequisites)}
+      - TYK_DB_STORAGE_MAIN_TYPE=postgres
+      - TYK_DB_STORAGE_MAIN_CONNECTIONSTRING=user=postgres password=topsecretpassword host=tyk-postgres port=5432 database=tyk_analytics
+    depends_on:
+      tyk-postgres:
+        condition: service_healthy
+    ports:
+      - "${DASHBOARD_HOST_PORT:-13000}:3000"
+    env_file:
+      - ./confs/tyk_analytics.env
+    networks:
+      - tyk
+
+  tyk-ent-portal:
+    image: tykio/portal:${PORTAL_VERSION:-v1.17.3}
+    user: root
+    command: --bootstrap
+    depends_on:
+      tyk-postgres:
+        condition: service_healthy
+    ports:
+      - "${PORTAL_HOST_PORT:-13001}:3001"
+    environment:
+      - PORTAL_LICENSEKEY=${DASH_LICENSE:?Dashboard license missing — copy .env.example to .env and set DASH_LICENSE (see README.md prerequisites)}
+    env_file:
+      - ./confs/tyk_portal.env
+    networks:
+      - tyk
+    volumes:
+      - portal-data:/opt/portal/themes
+
+  tyk-pump:
+    image: tykio/tyk-pump-docker-pub:${PUMP_VERSION:-v1.17.0}
+    env_file:
+      - ./confs/pump.env
+      - ./confs/pump.postgres.env
+    depends_on:
+      tyk-postgres:
+        condition: service_healthy
+    networks:
+      - tyk
+
+  keycloak:
+    image: keycloak/keycloak:${KEYCLOAK_VERSION:-latest}
+    depends_on:
+      tyk-postgres:
+        condition: service_healthy
+    networks:
+      - tyk
+    ports:
+      - "${KEYCLOAK_HOST_PORT:-18180}:8180"
+    command:
+      - start-dev
+    environment:
+      KC_DB: postgres
+      KC_DB_URL_HOST: tyk-postgres
+      KC_DB_URL_PORT: 5432
+      KC_DB_URL_DATABASE: keycloak
+      KC_DB_USERNAME: postgres
+      KC_DB_PASSWORD: topsecretpassword
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USER:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin1234}
+      KC_HEALTH_ENABLED: "true"
+      KC_HTTP_PORT: 8180
+      # Must match the *host-side* port above (KEYCLOAK_HOST_PORT), not the
+      # container's own internal 8180 — this is what browsers/curl from
+      # outside the docker network actually use.
+      KC_HOSTNAME: http://localhost:${KEYCLOAK_HOST_PORT:-18180}
+      # v2 hostname provider (Keycloak 26+): without this, a request that
+      # arrives on a hostname other than KC_HOSTNAME (e.g. the classic
+      # Dashboard calling a DCR registration endpoint via the internal
+      # docker-network hostname keycloak:8180, not localhost) fails token
+      # decoding.
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+
+  # One-shot: a fresh named volume is created root:root 0755 by Docker,
+  # which the edp-migrate image below can never write to on its own — its
+  # base image (gcr.io/distroless/static-debian12:nonroot) runs as UID
+  # 65532 and has no shell/chown binary of its own to fix this from the
+  # inside (confirmed live: even Phase 0's very first config save 403s
+  # with "permission denied" without this). Runs once, before edp-migrate,
+  # and exits.
+  edp-migrate-init:
+    image: busybox
+    command: ["sh", "-c", "chown -R 65532:65532 /data"]
+    volumes:
+      - edp-migrate-data:/data
+
+  # The tool this whole POC exists to demonstrate. With no arguments it
+  # serves the Phase 0 setup wizard on :9090 — open http://localhost:9090
+  # once every service above is healthy and seed.sh has populated some
+  # Classic Portal data to migrate.
+  #
+  # Pulled as a published image, not built from source (`context: ..`)
+  # — this directory is meant to stand alone as its own public repo,
+  # without the tool's own source tree as a sibling. Override
+  # EDP_MIGRATE_IMAGE in .env to point at ghcr.io instead of Docker Hub,
+  # or pin a specific released version instead of :latest.
+  edp-migrate:
+    image: ${EDP_MIGRATE_IMAGE:-docker.io/ataimo007/edp-migrate:latest}
+    ports:
+      - "${EDP_MIGRATE_HOST_PORT:-9090}:9090"
+    volumes:
+      - edp-migrate-data:/data
+    depends_on:
+      edp-migrate-init:
+        condition: service_completed_successfully
+      tyk-dashboard:
+        condition: service_started
+      tyk-ent-portal:
+        condition: service_started
+    networks:
+      - tyk
+
+volumes:
+  redis-data:
+  postgres-data:
+  portal-data:
+  edp-migrate-data:
+
+networks:
+  tyk:

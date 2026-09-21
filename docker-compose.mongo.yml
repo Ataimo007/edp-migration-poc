@@ -1,0 +1,30 @@
+# Optional override: use MongoDB instead of PostgreSQL for the Classic
+# Dashboard's storage backend.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.mongo.yml up -d
+#
+# edp-migrate's Setup wizard needs to be told about this explicitly (its
+# "Classic Dashboard database" step has a Mongo/Postgres choice) — there is
+# no way for the tool to detect this from the outside.
+services:
+  tyk-dashboard:
+    environment:
+      - TYK_DB_STORAGE_MAIN_TYPE=mongo
+      - TYK_DB_STORAGE_MAIN_CONNECTIONSTRING=mongodb://tyk-mongo:27017/tyk_analytics
+
+  tyk-pump:
+    env_file:
+      - ./confs/pump.mongo.env
+
+  tyk-mongo:
+    image: mongo:4.0
+    command: ["mongod", "--smallfiles"]
+    ports:
+      - "${MONGO_HOST_PORT:-27017}:27017"
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - tyk
+
+volumes:
+  mongo-data:
