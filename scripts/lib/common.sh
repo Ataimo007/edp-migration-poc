@@ -4,6 +4,26 @@
 
 set -uo pipefail
 
+# Every caller of this file has already `cd`'d to the repo root
+# (bootstrap.sh/seed.sh/reset.sh's own first line), so this is always
+# poc-environment/.env — the same file `docker compose up` itself reads
+# for host-port overrides (DASHBOARD_HOST_PORT etc.). Compose reads it
+# automatically for the compose file's own variable substitution, but a
+# plain bash script run directly (or invoked as a subprocess from
+# up.sh) has no such thing happen for it automatically — without this,
+# bootstrap.sh/seed.sh/reset.sh silently ignored any port customization
+# in .env and fell back to the hardcoded default (13000 etc.), which,
+# confirmed live, can mean bootstrapping against a completely different,
+# unrelated Dashboard that happens to already be listening on that
+# default port rather than this stack's own (intentionally
+# non-default-ported) one.
+if [[ -f .env ]]; then
+  set -a
+  # shellcheck source=/dev/null
+  source .env
+  set +a
+fi
+
 # ---- logging --------------------------------------------------------------
 
 _c_reset=$'\033[0m'; _c_dim=$'\033[2m'; _c_red=$'\033[31m'; _c_green=$'\033[32m'; _c_yellow=$'\033[33m'; _c_blue=$'\033[34m'

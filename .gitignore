@@ -2,5 +2,10 @@
 .runtime.env
 *.log
 
+# Compose auto-loads this if present — a local escape hatch (e.g. for the
+# postgres-init bind-mount workaround the README documents), never meant
+# to be committed.
+docker-compose.override.yml
+
 # up.sh/seed.sh's own state — not something a fresh clone should start with.
 .seed-state/
