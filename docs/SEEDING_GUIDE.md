@@ -41,7 +41,7 @@ scripts/seed.sh --developers 50 --apis-per-type 1 --keys-per-developer 4 --pendi
 
 | Auth type | What it demonstrates in a migration |
 |---|---|
-| `keyless` | No credential at all — migrates cleanly, no key to adopt. |
+| `keyless` | No credential at all. EDP's own Product-creation validation rejects this auth type too (found live via this stack — was previously misclassified as a real Product and 422'd at execute time, since fixed) — migrates as a documentation-only Product, same as `hmac`/`oauth`/`openid`/`other` below. Costs nothing: a keyless API had no credential to adopt anyway. |
 | `authToken` | The classic default (a plain bearer token) — the most common real-world case. |
 | `basic` | HTTP Basic Auth. |
 | `hmac` | Signed requests. EDP's own Product-creation validation **rejects this auth type outright** — migrates as a documentation-only Product by design, not a bug (see "Dead ends by design" below). |
@@ -59,9 +59,9 @@ scripts/seed.sh --scale medium --auth-types keyless,authToken,basic
 
 ### Dead ends by design, not bugs
 
-If your run includes `hmac`, `oauth`, `openid`, or `other`, don't be
-surprised when `edp-migrate`'s discovery/migration reports flag them as
-"documentation-only Product" or "needs manual review" — EDP's own
+If your run includes `hmac`, `oauth`, `openid`, `keyless`, or `other`,
+don't be surprised when `edp-migrate`'s discovery/migration reports flag
+them as "documentation-only Product" or "needs manual review" — EDP's own
 Product-creation validation rejects these auth types outright
 (confirmed live), and there's no credential-adoption path for a Product
 that was never created as a real, subscribable one. This is the tool

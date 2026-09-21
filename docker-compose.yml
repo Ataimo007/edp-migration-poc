@@ -1,9 +1,9 @@
 # Full Tyk stack + Keycloak + the edp-migration tool, for the EDP Migration
 # POC (see README.md). Host ports all default to exactly what
-# edp-migrate's own Setup wizard prefills out of the box (see
-# ../internal/config/config.go's DefaultLocalConfig) — leave the *_HOST_PORT
-# variables at their defaults and the migration tool needs zero manual
-# configuration to find this stack.
+# edp-migrate's own Setup wizard prefills out of the box (DefaultLocalConfig,
+# in the core tool's own repo) — leave the *_HOST_PORT variables at their
+# defaults and the migration tool needs zero manual configuration to find
+# this stack.
 services:
   tyk-postgres:
     image: postgres:18

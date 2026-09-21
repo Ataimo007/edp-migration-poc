@@ -13,8 +13,12 @@ for a richer, standalone developer-experience story.
 `edp-migrate` (the tool this POC exists to exercise) walks everything on
 the Classic side and recreates the equivalent on the EDP side: developers
 become EDP users, catalogue entries become Products/Plans, issued keys get
-adopted as credentials, and so on. `../MIGRATION_PLAN.md` at the repo root
-is the full design document for exactly how each resource type maps.
+adopted as credentials, and so on. `MIGRATION_PLAN.md`, in the core tool's
+own (private) repo — not part of this directory — is the full design
+document for exactly how each resource type maps; that repo's own README
+is also where every classic auth type's exact EDP treatment is documented
+(this directory's [SEEDING_GUIDE.md](SEEDING_GUIDE.md) covers the same
+ground from the "seeding data to demonstrate it" angle instead).
 
 ## The stack
 
@@ -40,8 +44,8 @@ is the full design document for exactly how each resource type maps.
 
                     ┌────────────────┐
                     │  edp-migrate   │  reads Dashboard + Postgres + Redis,
-                    │  (this repo's  │  writes EDP — the tool under test
-                    │  own tool)     │
+                    │  (published    │  writes EDP — the tool under test,
+                    │  image, pulled)│  pulled from Docker Hub/ghcr.io
                     └────────────────┘
 ```
 
@@ -66,7 +70,7 @@ work with.
 
 ```
 poc-environment/
-├── docker-compose.yml         the full stack, including edp-migrate itself
+├── docker-compose.yml         the full stack, pulling edp-migrate as a published image
 ├── docker-compose.mongo.yml   optional override: Mongo instead of Postgres
 ├── confs/                     env files for each Tyk component
 ├── postgres-init/             creates the extra Postgres databases on first boot

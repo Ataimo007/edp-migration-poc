@@ -100,11 +100,36 @@ until you run `decommission`, which is genuinely destructive (it takes its
 own fresh backup first, and asks you to type "yes").
 
 **DCR-migrated Products, and every documentation-only Product** (the
-`hmac`/`oauth`/`openid`/`other` buckets from your seed data) are
+`hmac`/`oauth`/`openid`/`keyless`/`other` buckets from your seed data) are
 automatically **skipped** by both Cutover and Decommission — there's no
 staged classic-side object to deactivate/delete for either. `edp-migrate`
 reports this explicitly rather than silently leaving them alone
 unexplained.
+
+**The 30-day Decommission gate is a web UI thing, not a CLI thing.** The
+web wizard blocks Decommission for 30 days after Cutover first runs (a
+deliberate safety window). The CLI command shown above does **not**
+enforce that gate — `decommission` will run immediately after `cutover`
+if you invoke it this way. That's the right behavior for exercising this
+POC's own test cycle quickly, but worth knowing if you're demonstrating
+the tool's real production safety behavior specifically — do that through
+the web UI (`http://localhost:9090`) instead.
+
+## Debugging something that isn't working
+
+Every category of operation — API calls to the Classic Dashboard/EDP,
+direct database queries, web UI requests, migration activity — is logged
+at an appropriate level, always to the container's stderr (`docker
+compose logs edp-migrate`), separate from the tool's own stdout output:
+
+```sh
+docker compose exec -e EDP_MIGRATE_LOG_LEVEL=debug edp-migrate edp-migrate inventory
+```
+
+`EDP_MIGRATE_LOG_LEVEL` accepts `debug`/`verbose` (every API call and DB
+query), `info` (default), `warn`, or `error`. `EDP_MIGRATE_LOG_FORMAT=json`
+gives structured output if you're piping `docker compose logs` into
+something that parses it.
 
 ## Starting over
 

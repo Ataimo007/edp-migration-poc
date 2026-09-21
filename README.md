@@ -34,9 +34,27 @@ Then open <http://localhost:9090> and follow
 | **edp-migrate** | The migration tool itself | <http://localhost:9090> |
 
 Every host port above is the exact default `edp-migrate`'s own Setup wizard
-prefills (see `../internal/config/config.go`'s `DefaultLocalConfig`) — as
+prefills (`DefaultLocalConfig`, in the core tool's own repo) — as
 long as you leave `.env`'s `*_HOST_PORT` variables alone, the tool needs
 zero manual configuration to find this stack.
+
+## Where `edp-migrate` itself comes from
+
+This stack pulls a **published image** (`EDP_MIGRATE_IMAGE` in
+`.env.example`, default `docker.io/ataimo007/edp-migrate:latest`) — it
+never builds from source, so this directory works as a fully standalone
+repo with no sibling source tree required. Every tagged release publishes
+to all of the following simultaneously:
+
+| Channel | What you get |
+|---|---|
+| [Docker Hub](https://hub.docker.com/r/ataimo007/edp-migrate) | `docker.io/ataimo007/edp-migrate:X.Y.Z` / `:latest` — what this stack uses by default |
+| [ghcr.io](https://github.com/Ataimo007/edp-migration/pkgs/container/edp-migrate) | `ghcr.io/ataimo007/edp-migrate:X.Y.Z` / `:latest` — set `EDP_MIGRATE_IMAGE=ghcr.io/ataimo007/edp-migrate:latest` in `.env` to use this instead |
+| GitHub Releases | Plain cross-compiled binaries (`.tar.gz`, linux/darwin, amd64/arm64) + checksums, if you'd rather run `edp-migrate` directly on your machine than in a container |
+| Buildkite Package Registries | `.deb`/`.rpm` packages, for installing `edp-migrate` as a native system package on a real (non-container) Linux host |
+
+Pin a specific version rather than always tracking `:latest` by setting
+`EDP_MIGRATE_IMAGE=docker.io/ataimo007/edp-migrate:X.Y.Z` in `.env`.
 
 ## Prerequisites
 
@@ -73,6 +91,11 @@ stack).
   many pending key requests to leave open, and so on).
 - **Curious how the pieces fit together?** Read
   [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+- **Something not working as expected?** See
+  [docs/MIGRATION_WALKTHROUGH.md](docs/MIGRATION_WALKTHROUGH.md)'s
+  "Debugging" section — `edp-migrate` logs every API call, database
+  query, and web request at a configurable level
+  (`EDP_MIGRATE_LOG_LEVEL`), always to `docker compose logs edp-migrate`.
 
 ## Resetting
 
