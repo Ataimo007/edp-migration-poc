@@ -22,7 +22,10 @@ if [[ ! -f .env ]]; then
   ok "wrote .env"
 fi
 
-info "bringing the stack up (this can take a minute the first time, while images pull/build)..."
+info "pulling the latest images (docker won't do this on its own for a tag it already has cached)..."
+docker compose pull || die "docker compose pull failed — see the output above"
+
+info "bringing the stack up..."
 docker compose up -d || die "docker compose up failed — see the output above"
 
 scripts/bootstrap.sh

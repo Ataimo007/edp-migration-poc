@@ -48,10 +48,10 @@ to all of the following simultaneously:
 
 | Channel | What you get |
 |---|---|
-| [Docker Hub](https://hub.docker.com/r/ataimo007/edp-migrate) | `docker.io/ataimo007/edp-migrate:X.Y.Z` / `:latest` — what this stack uses by default |
-| [ghcr.io](https://github.com/Ataimo007/edp-migration/pkgs/container/edp-migrate) | `ghcr.io/ataimo007/edp-migrate:X.Y.Z` / `:latest` — set `EDP_MIGRATE_IMAGE=ghcr.io/ataimo007/edp-migrate:latest` in `.env` to use this instead |
-| GitHub Releases | Plain cross-compiled binaries (`.tar.gz`, linux/darwin, amd64/arm64) + checksums, if you'd rather run `edp-migrate` directly on your machine than in a container |
-| Buildkite Package Registries | `.deb`/`.rpm` packages, for installing `edp-migrate` as a native system package on a real (non-container) Linux host |
+| [Docker Hub](https://hub.docker.com/r/ataimo007/edp-migrate) | `docker.io/ataimo007/edp-migrate:X.Y.Z` / `:latest` — what this stack uses by default, and the only channel confirmed to work with **no GitHub account or credentials at all** (verified via an anonymous pull) |
+| [ghcr.io](https://github.com/Ataimo007/edp-migration/pkgs/container/edp-migrate) | `ghcr.io/ataimo007/edp-migrate:X.Y.Z` / `:latest` — **currently private** (confirmed via an anonymous pull: `403 DENIED`), since it inherits the core `edp-migration` repo's own private visibility. Not a general public option today; stick with Docker Hub unless you specifically have read access to that repo |
+| GitHub Releases | Plain cross-compiled binaries (`.tar.gz`, linux/darwin, amd64/arm64) + checksums, if you'd rather run `edp-migrate` directly than in a container — **also gated by the private core repo** (confirmed via an anonymous request: `404`), with no way to make a release public independently of the repo itself. Not usable without repo access |
+| Buildkite Package Registries | `.deb`/`.rpm` packages, for installing `edp-migrate` as a native system package on a real (non-container) Linux host — public, via the registry's own visibility setting |
 
 Pin a specific version rather than always tracking `:latest` by setting
 `EDP_MIGRATE_IMAGE=docker.io/ataimo007/edp-migrate:X.Y.Z` in `.env`.
