@@ -14,18 +14,29 @@ just re-invokes the same binary as a subprocess.
 
 ## Phase 0 — Setup
 
-Open <http://localhost:9090>. The five-page wizard asks for exactly the
-connection details this stack already uses — and prefills every field
-with them by default, since this POC's ports match `edp-migrate`'s own
-`DefaultLocalConfig`:
+Open <http://localhost:9090> in your browser — that part's always the
+*host*-mapped port, since your browser runs outside the compose network.
+The five-page wizard's own default prefill (`edp-migrate`'s
+`DefaultLocalConfig`) assumes `edp-migrate` itself is also running on your
+host (e.g. via `go run ./cmd/edp-migrate`), so those defaults use
+`localhost:<host-port>` for every downstream connection. That's **wrong**
+for this stack's normal setup, where `edp-migrate` runs as its own
+container on the compose network — `localhost` from inside that container
+means the container itself, not your host. Override every field to the
+internal service hostnames below instead:
 
 | Page | Value |
 |---|---|
-| Dashboard (Classic Portal) | URL `http://localhost:13000`; credential = the `DASH_TOKEN` printed by `scripts/bootstrap.sh` (also in `.runtime.env`) |
-| Classic Dashboard database | Postgres, `user=postgres password=topsecretpassword host=localhost port=15432 database=tyk_analytics sslmode=disable` |
-| Enterprise Developer Portal | URL `http://localhost:13001/portal-api`; credential = an EDP admin JWT (Setup mints one live once you submit this page — enter EDP's admin login the first time) |
-| EDP database | `user=postgres password=topsecretpassword host=localhost port=15432 database=tyk_portal sslmode=disable` |
-| Redis (Gateway key store) | `localhost:16379` |
+| Dashboard (Classic Portal) | URL `http://tyk-dashboard:3000`; credential = the `DASH_TOKEN` printed by `scripts/bootstrap.sh` (also in `.runtime.env`) |
+| Classic Dashboard database | Postgres, `user=postgres password=topsecretpassword host=tyk-postgres port=5432 database=tyk_analytics sslmode=disable` |
+| Enterprise Developer Portal | URL `http://tyk-ent-portal:3001/portal-api`; credential = an EDP admin JWT (Setup mints one live once you submit this page — enter EDP's admin login the first time) |
+| EDP database | `user=postgres password=topsecretpassword host=tyk-postgres port=5432 database=tyk_portal sslmode=disable` |
+| Redis (Gateway key store) | `tyk-redis:6379` |
+
+Running `edp-migrate` directly on your host instead (Go installed, no
+container)? Use `localhost:<host-port>` for each of the above — the
+defaults the wizard already prefills — since your host reaches every other
+service through its mapped port, not the internal compose network.
 
 Each page has its own "Test Connectivity" check — don't move on until it's
 green. If you used `docker-compose.mongo.yml`, tell the wizard Mongo, not
