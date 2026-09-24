@@ -11,9 +11,9 @@ credentials it writes to `.runtime.env`.
 ## Basic usage
 
 ```sh
-scripts/seed.sh --scale small           # 5 developers, 1 API per auth type
-scripts/seed.sh --scale medium          # 25 developers, 2 APIs per auth type
-scripts/seed.sh --scale large           # 100 developers, 3 APIs per auth type
+scripts/seed.sh --scale small           # 20 developers, 1 API per auth type
+scripts/seed.sh --scale medium          # 100 developers, 2 APIs per auth type
+scripts/seed.sh --scale large           # 500 developers, 3 APIs per auth type
 scripts/seed.sh --scale small --dry-run # print what would happen, make no API calls
 ```
 
@@ -24,9 +24,9 @@ it doesn't clear anything first. Use `scripts/reset.sh` to clear.
 
 | Preset | Developers | APIs per auth type | Keys per developer | Pending requests |
 |---|---|---|---|---|
-| `small` (default) | 5 | 1 | 1 | 2 |
-| `medium` | 25 | 2 | 2 | 5 |
-| `large` | 100 | 3 | 3 | 15 |
+| `small` (default) | 20 | 1 | 2 | 5 |
+| `medium` | 100 | 2 | 3 | 15 |
+| `large` | 500 | 3 | 5 | 50 |
 
 Every value is individually overridable:
 
@@ -42,7 +42,7 @@ scripts/seed.sh --developers 50 --apis-per-type 1 --keys-per-developer 4 --pendi
 | Auth type | What it demonstrates in a migration |
 |---|---|
 | `keyless` | No credential at all. EDP's own Product-creation validation rejects this auth type too (found live via this stack — was previously misclassified as a real Product and 422'd at execute time, since fixed) — migrates as a documentation-only Product, same as `hmac`/`oauth`/`openid`/`other` below. Costs nothing: a keyless API had no credential to adopt anyway. |
-| `authToken` | The classic default (a plain bearer token) — the most common real-world case. |
+| `authToken` (alias: `token`) | The classic default (a plain bearer token) — the most common real-world case. |
 | `basic` | HTTP Basic Auth. |
 | `hmac` | Signed requests. EDP's own Product-creation validation **rejects this auth type outright** — migrates as a documentation-only Product by design, not a bug (see "Dead ends by design" below). |
 | `jwt` | Shared-secret JWT (see note below — this is deliberately *not* DCR-registered). |

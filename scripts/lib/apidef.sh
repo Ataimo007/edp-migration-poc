@@ -9,10 +9,16 @@
 # mutualTLS other
 set -uo pipefail
 
-# The same publicly-reachable Tyk demo echo backend tyk-platform/up.sh
-# already uses for its own seed API — real traffic through the seeded
-# Gateway actually works, not just Dashboard/Portal metadata.
-PROXY_TARGET="${PROXY_TARGET:-http://echo.tyk-demo.com:8080/trial}"
+# This stack's own httpbin service (docker-compose.yml) — reachable from
+# tyk-gateway over the internal "tyk" docker network at its real internal
+# service name + port, same convention as every other internal address in
+# this repo (independent of any host-side port mapping). Real traffic
+# through the seeded Gateway actually works end to end, not just
+# Dashboard/Portal metadata — confirmed live: the previous default
+# (a public internet demo endpoint) depended on the container having
+# outbound internet access at all, which isn't guaranteed in every
+# environment this stack runs in.
+PROXY_TARGET="${PROXY_TARGET:-http://httpbin/}"
 
 # build_apidef NAME LISTEN_PATH AUTH_TYPE — prints the api_definition JSON.
 build_apidef() {

@@ -128,6 +128,40 @@ create_developer() {
   printf '%s' "$dev_id"
 }
 
+# ---- Admin / console users --------------------------------------------------
+
+# create_admin_user EMAIL FIRST LAST PASSWORD — a Dashboard admin/console
+# user, distinct from a portal Developer (see edp-migrate's own
+# distinction between the two in Migration Configure: "Admin Users → EDP
+# Admins" is a separate, opt-in list from the public developer signups).
+# Same two-step pattern bootstrap.sh uses for the very first admin:
+# create via /admin/users/ (admin-secret-authenticated), then set the
+# real password via POST /api/users/{id}/actions/reset — POST, not PUT,
+# see bootstrap.sh's own comment for why that distinction is load-bearing.
+# Prints the new user's id.
+create_admin_user() {
+  local email="$1" first="$2" last="$3" password="$4"
+  local resp user_id reset_resp reset_status
+  resp=$(dash_admin POST /admin/users/ "$(jq -n \
+    --arg org "$ORG_ID" --arg first "$first" --arg last "$last" --arg email "$email" \
+    '{ org_id: $org, first_name: $first, last_name: $last, email_address: $email, active: true, user_permissions: { IsAdmin: "admin" } }')")
+  user_id=$(json_get "$resp" '.Meta.id // empty')
+  if [[ -z "$user_id" || "$user_id" == "null" ]]; then
+    err "create_admin_user($email): unexpected response: $resp"
+    return 1
+  fi
+  reset_resp=$(curl -s -w '\n%{http_code}' -X POST "${DASHBOARD_URL}/api/users/${user_id}/actions/reset" \
+    -H "Content-Type: application/json" -H "authorization: ${DASH_TOKEN}" \
+    --data "$(jq -n --arg pw "$password" '{ new_password: $pw, user_permissions: { IsAdmin: "admin" } }')")
+  reset_status="${reset_resp##*$'\n'}"
+  if [[ "$reset_status" != "200" ]]; then
+    err "create_admin_user($email): password set failed (HTTP $reset_status)"
+    return 1
+  fi
+  verbose "created admin user '$email' -> $user_id"
+  printf '%s' "$user_id"
+}
+
 # ---- Keys / key requests ----------------------------------------------------
 
 # issue_key_for_developer DEV_ID POLICY_ID — admin-issues a key directly

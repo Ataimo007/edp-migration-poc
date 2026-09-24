@@ -51,9 +51,12 @@ ground from the "seeding data to demonstrate it" angle instead).
 
 All three logical databases (the Classic Dashboard's `tyk_analytics`, EDP's
 `tyk_portal`, and Keycloak's own `keycloak`) live in **one** Postgres
-instance, in separate databases — `postgres-init/01-create-databases.sql`
-creates the latter two on first boot (`tyk_analytics` is created by the
-`POSTGRES_DB` environment variable already).
+instance, in separate databases — the one-shot `tyk-postgres-init`
+service creates the latter two over the network once Postgres is healthy
+(`tyk_analytics` is created by the `POSTGRES_DB` environment variable
+already). Both `tyk-ent-portal` and `keycloak` depend on it completing
+successfully before they start, so there's no race with either database
+not existing yet.
 
 ## Why seed the Classic side at all?
 
@@ -73,7 +76,6 @@ poc-environment/
 ├── docker-compose.yml         the full stack, pulling edp-migrate as a published image
 ├── docker-compose.mongo.yml   optional override: Mongo instead of Postgres
 ├── confs/                     env files for each Tyk component
-├── postgres-init/             creates the extra Postgres databases on first boot
 ├── up.sh                      one-command quickstart (compose up + bootstrap + seed)
 ├── scripts/
 │   ├── bootstrap.sh           creates the org/admin user/portal config (idempotent)

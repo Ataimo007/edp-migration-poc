@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # reset.sh — removes everything scripts/seed.sh has ever created on the
-# CLASSIC PORTAL side only (every developer, API, and policy recorded in
-# .seed-state/*.jsonl), leaving the org, admin user, and portal config from
-# bootstrap.sh intact so you can reseed immediately.
+# CLASSIC PORTAL side only (every developer, API, policy, and pending
+# request recorded in .seed-state/run-*.yaml or .json), leaving the org,
+# admin user, and portal config from bootstrap.sh intact so you can
+# reseed immediately.
 #
 # IMPORTANT: if you've also run edp-migrate against this data (inventory
 # is fine; plan/execute is not), use --full instead, every time. EDP has a
@@ -20,6 +21,7 @@ set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 source scripts/lib/common.sh
+require_cmd yq
 
 if [[ "${1:-}" == "--full" ]]; then
   warn "docker compose down -v: this deletes every container AND volume (Postgres/Redis/Portal data, EDP's database, the edp-migrate /data volume) — irreversible, and the only reliable way to also clear anything already migrated into EDP."
@@ -38,28 +40,33 @@ RUNTIME_FILE="$(pwd)/.runtime.env"
 source "$RUNTIME_FILE"
 
 shopt -s nullglob
-files=(.seed-state/*.jsonl)
+files=(.seed-state/run-*.yaml .seed-state/run-*.json)
 if [[ ${#files[@]} -eq 0 ]]; then
-  info "no .seed-state/*.jsonl files found — nothing seed.sh created is tracked, nothing to delete"
+  info "no .seed-state/run-*.yaml|json files found — nothing seed.sh created is tracked, nothing to delete"
   info "(run with --full to tear down the whole docker compose stack instead)"
   exit 0
 fi
 
 warn "this only cleans the Classic Dashboard side. If you've already run 'edp-migrate execute' against this data, this will NOT clean up EDP's database — use --full instead (see this script's header comment)."
 
-dev_ids=() policy_ids=() api_ids=() request_ids=()
+# Each state file is one JSON-shaped document (yaml or json — yq reads
+# both) of the form {apis:[{id,...}], policies:[{id,...}],
+# developers:[{id, keys:[...], pending_requests:[{id,...}]}]}; request ids
+# live nested under the developer that raised them, not as their own
+# top-level list.
+dev_ids=() policy_ids=() api_ids=() request_ids=() admin_ids=()
 for f in "${files[@]}"; do
-  while IFS=$'\t' read -r type id; do
-    case "$type" in
-      developer) dev_ids+=("$id") ;;
-      policy)    policy_ids+=("$id") ;;
-      api)       api_ids+=("$id") ;;
-      request)   request_ids+=("$id") ;;
-    esac
-  done < <(jq -r '[.type, .id] | @tsv' "$f")
+  while IFS= read -r id; do api_ids+=("$id"); done < <(yq -p yaml -o json "$f" | jq -r '.apis[].id')
+  while IFS= read -r id; do policy_ids+=("$id"); done < <(yq -p yaml -o json "$f" | jq -r '.policies[].id')
+  while IFS= read -r id; do dev_ids+=("$id"); done < <(yq -p yaml -o json "$f" | jq -r '.developers[].id')
+  while IFS= read -r id; do request_ids+=("$id"); done < <(yq -p yaml -o json "$f" | jq -r '.developers[].pending_requests[].id')
+  # "bootstrap" is a sentinel id for bootstrap.sh's own org-owner admin
+  # (#1) — recorded for reference, never created or deleted by seed.sh
+  # itself, so it's excluded here on purpose.
+  while IFS= read -r id; do [[ "$id" != "bootstrap" ]] && admin_ids+=("$id"); done < <(yq -p yaml -o json "$f" | jq -r '.admin_users[].id')
 done
 
-info "deleting ${#dev_ids[@]} developer(s), ${#request_ids[@]} pending request(s), ${#policy_ids[@]} policy(ies), ${#api_ids[@]} API(s) recorded by previous seed.sh runs..."
+info "deleting ${#dev_ids[@]} developer(s), ${#request_ids[@]} pending request(s), ${#policy_ids[@]} policy(ies), ${#api_ids[@]} API(s), ${#admin_ids[@]} additional admin user(s) recorded by previous seed.sh runs..."
 
 # Deleted first, and independently of developers below: a KeyRequest
 # record outlives the developer who raised it (confirmed live — deleting
@@ -96,6 +103,9 @@ ok "policies: delete attempted for ${#policy_ids[@]}"
 
 delete_all "/api/apis/" "${api_ids[@]}"
 ok "APIs: delete attempted for ${#api_ids[@]}"
+
+delete_all "/api/users/" "${admin_ids[@]}"
+ok "additional admin users: delete attempted for ${#admin_ids[@]}"
 
 if [[ ${#failed_ids[@]} -gt 0 ]]; then
   warn "${#failed_ids[@]} deletion(s) failed and were left in place:"

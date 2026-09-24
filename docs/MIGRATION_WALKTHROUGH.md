@@ -16,31 +16,44 @@ just re-invokes the same binary as a subprocess.
 
 Open <http://localhost:9090> in your browser — that part's always the
 *host*-mapped port, since your browser runs outside the compose network.
-The five-page wizard's own default prefill (`edp-migrate`'s
-`DefaultLocalConfig`) assumes `edp-migrate` itself is also running on your
-host (e.g. via `go run ./cmd/edp-migrate`), so those defaults use
-`localhost:<host-port>` for every downstream connection. That's **wrong**
-for this stack's normal setup, where `edp-migrate` runs as its own
-container on the compose network — `localhost` from inside that container
-means the container itself, not your host. Override every field to the
-internal service hostnames below instead:
+Since `edp-migrate` runs as its own container on the compose network here,
+the five-page wizard should already show every field prefilled to the
+internal service hostnames below (`confs/edp-migrate.env`, loaded by
+`docker-compose.yml`'s own `edp-migrate` service) — you shouldn't need to
+type any of this in yourself, just confirm each page's values and Test
+Connectivity:
 
 | Page | Value |
 |---|---|
 | Dashboard (Classic Portal) | URL `http://tyk-dashboard:3000`; credential = the `DASH_TOKEN` printed by `scripts/bootstrap.sh` (also in `.runtime.env`) |
 | Classic Dashboard database | Postgres, `user=postgres password=topsecretpassword host=tyk-postgres port=5432 database=tyk_analytics sslmode=disable` |
-| Enterprise Developer Portal | URL `http://tyk-ent-portal:3001/portal-api`; credential = an EDP admin JWT (Setup mints one live once you submit this page — enter EDP's admin login the first time) |
+| Enterprise Developer Portal | URL `http://tyk-ent-portal:3001/portal-api`; credential = an EDP admin API token, pasted as the raw `Authorization` header value |
 | EDP database | `user=postgres password=topsecretpassword host=tyk-postgres port=5432 database=tyk_portal sslmode=disable` |
 | Redis (Gateway key store) | `tyk-redis:6379` |
 
+The only fields the wizard *can't* prefill are the credentials themselves
+(`DASH_TOKEN`, the EDP admin token) — those still need pasting in by hand,
+see below.
+
 Running `edp-migrate` directly on your host instead (Go installed, no
-container)? Use `localhost:<host-port>` for each of the above — the
-defaults the wizard already prefills — since your host reaches every other
-service through its mapped port, not the internal compose network.
+container)? Its default prefill (`DefaultLocalConfig`) then falls back to
+`localhost:<host-port>` for everything, since none of the `EDP_MIGRATE_*_HOST`
+env vars above apply outside a container on this compose network — see the
+main [README](../README.md)'s "Setup wizard port defaults" section for the
+full fallback chain.
 
 Each page has its own "Test Connectivity" check — don't move on until it's
 green. If you used `docker-compose.mongo.yml`, tell the wizard Mongo, not
 Postgres, on the Classic Dashboard database page.
+
+**Getting an EDP admin token:** EDP's own API has no login endpoint at
+all — by design, it's a pre-issued management token, not something a
+client exchanges credentials for. Log into EDP's admin UI at
+<http://localhost:13001> yourself, open the admin user's own profile
+page, and copy the API token shown there. Paste that as-is into Setup's
+EDP credential field. This token can expire/rotate, so if EDP calls start
+403ing partway through a long session, re-copy a fresh one from the same
+profile page rather than assuming the tool itself is broken.
 
 ## Phase 1 — Discovery (`inventory`)
 

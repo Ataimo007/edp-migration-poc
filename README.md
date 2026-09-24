@@ -24,19 +24,22 @@ Then open <http://localhost:9090> and follow
 
 | Service | What it is | URL |
 |---|---|---|
-| Tyk Gateway | The API gateway/proxy | <http://localhost:18080> |
-| Tyk Dashboard | Management API + the **Classic Portal** you'll migrate from | <http://localhost:13000> |
+| Tyk Gateway | The API gateway/proxy | <http://localhost:8080> |
+| Tyk Dashboard | Management API + the **Classic Portal** you'll migrate from | <http://localhost:3000> |
 | Tyk Pump | Ships analytics from the Gateway into Postgres | (no UI) |
-| Enterprise Developer Portal (EDP) | The **migration target** | <http://localhost:13001> |
-| Keycloak | An external IdP, for exercising OpenID Connect/DCR scenarios | <http://localhost:18180> |
-| Postgres | Storage for the Dashboard, EDP, and Keycloak (separate databases) | localhost:15432 |
-| Redis | The Gateway's key store | localhost:16379 |
+| Enterprise Developer Portal (EDP) | The **migration target** | <http://localhost:3001> |
+| Keycloak | An external IdP, for exercising OpenID Connect/DCR scenarios | <http://localhost:8180> |
+| Postgres | Storage for the Dashboard, EDP, and Keycloak (separate databases) | localhost:5432 |
+| Redis | The Gateway's key store | localhost:6379 |
 | **edp-migrate** | The migration tool itself | <http://localhost:9090> |
 
-Every host port above is the exact default `edp-migrate`'s own Setup wizard
-prefills (`DefaultLocalConfig`, in the core tool's own repo) — as
-long as you leave `.env`'s `*_HOST_PORT` variables alone, the tool needs
-zero manual configuration to find this stack.
+Every host port above is a plain/standard value (run `./up.sh --dev-ports`
+to shift them to a 13000-style set instead, if something else on your
+machine already uses one of these). None of this affects `edp-migrate`
+itself, though — it runs as its own container on this stack's docker
+network, so its Setup wizard always reaches every other service directly
+by internal Docker hostname and internal port (`confs/edp-migrate.env`),
+completely independent of whatever `*_HOST_PORT` values you're using.
 
 ## Where `edp-migrate` itself comes from
 
@@ -55,6 +58,33 @@ to all of the following simultaneously:
 
 Pin a specific version rather than always tracking `:latest` by setting
 `EDP_MIGRATE_IMAGE=docker.io/ataimo007/edp-migrate:X.Y.Z` in `.env`.
+
+**Working in the private core-tool repo specifically** (this file is also
+mirrored standalone to the public repo above, where the rest of this
+section doesn't apply — there's no sibling source tree there to build
+from): a `docker-compose.dev.yml` override builds `edp-migrate` from
+local source instead of pulling the published image, so an in-progress
+core-tool change can be tested against this stack without cutting a real
+release first. It's gitignored (never committed, so it can never end up
+in the public mirror — same treatment as `docker-compose.override.yml`
+below), so create it yourself:
+
+```yaml
+# poc-environment/docker-compose.dev.yml
+services:
+  edp-migrate:
+    image: edp-migrate:dev-local
+    build:
+      context: ..
+      dockerfile: Dockerfile
+```
+
+```sh
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+```
+
+Tagged distinctly (`edp-migrate:dev-local`) so there's no chance of
+confusing a local build with a stale cached pull under the same tag.
 
 ## Prerequisites
 
@@ -78,7 +108,23 @@ ghcr.io or a pinned version instead of Docker Hub `:latest`) followed by
 `scripts/bootstrap.sh` and `scripts/seed.sh` — see
 [docs/SEEDING_GUIDE.md](docs/SEEDING_GUIDE.md) if you'd rather run those
 steps yourself (e.g. to reseed at a different scale without restarting the
-stack).
+stack). Pass `./up.sh --fresh` to tear down and wipe every volume first,
+for a genuinely clean start in one command. Ports default to plain,
+standard values (`3000`/`3001`/`8080`/etc.) so this stack won't collide
+with anything else already using those — pass `./up.sh --dev-ports`
+instead to switch every `*_HOST_PORT` in `.env` to the shifted values
+(`13000`/`13001`/`18080`/etc.) that `edp-migrate`'s own Setup wizard
+prefills by default when run directly on a host (not as a container), if
+you'd rather have that match automatically. None of this affects
+`edp-migrate`'s own container either way — it always reaches every other
+service by internal Docker hostname and internal port
+(`confs/edp-migrate.env`), completely independent of `*_HOST_PORT`.
+
+Core-tool development only: pass `./up.sh --dev` to build `edp-migrate`
+from this repo's own local source (`docker-compose.dev.yml`) instead of
+pulling the published image, for testing an in-progress core-tool change
+here without cutting a release first. Nobody using this POC as a plain
+consumer should ever need it.
 
 ## What to do next
 
@@ -114,10 +160,6 @@ stack).
 
 ## Troubleshooting
 
-- **"mounts denied ... not shared from the host"** (Docker Desktop only):
-  add this repo's path under Docker Desktop's Preferences → Resources →
-  File Sharing, then retry. This affects the `postgres-init/` bind mount
-  that creates the `tyk_portal`/`keycloak` databases on first boot.
 - **Dashboard/Portal container won't start / license error**: double-check
   `DASH_LICENSE` in `.env` — both the Dashboard and the EDP container
   reuse the same trial license.

@@ -99,6 +99,15 @@ _domains=(cloud tech labs systems analytics works digital io dev)
 
 rand_pick() { local -n arr="$1"; echo "${arr[$((RANDOM % ${#arr[@]}))]}"; }
 
+# gen_password — a random per-account password, real enough to matter
+# once it's recorded in a seed-state file someone might actually use to
+# log in and poke around, not just a shared placeholder every account
+# reuses. Guarantees at least one digit and one uppercase letter so it
+# clears typical "must contain a number/uppercase" signup validation.
+gen_password() {
+  printf 'Px%s9!' "$(openssl rand -base64 9 | tr -dc 'A-Za-z0-9' | head -c 10)"
+}
+
 # seeded_person SUFFIX — prints "FirstName<TAB>LastName<TAB>email" for a
 # deterministic-shape, unique-per-suffix fake developer.
 seeded_person() {

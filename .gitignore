@@ -7,5 +7,13 @@
 # to be committed.
 docker-compose.override.yml
 
+# Builds edp-migrate from this repo's own local source (see README.md) —
+# only usable here, in the private core-tool repo, never in the public
+# poc-environment mirror. Gitignored, not just left out of the sync
+# workflow, so it can never end up in that mirror's history in the first
+# place — recreate it locally from README.md's own copy if it goes
+# missing.
+docker-compose.dev.yml
+
 # up.sh/seed.sh's own state — not something a fresh clone should start with.
 .seed-state/

@@ -1,9 +1,14 @@
 # Full Tyk stack + Keycloak + the edp-migration tool, for the EDP Migration
-# POC (see README.md). Host ports all default to exactly what
-# edp-migrate's own Setup wizard prefills out of the box (DefaultLocalConfig,
-# in the core tool's own repo) — leave the *_HOST_PORT variables at their
-# defaults and the migration tool needs zero manual configuration to find
-# this stack.
+# POC (see README.md). Host ports (the *_HOST_PORT variables) default to
+# plain/standard values (won't collide with this stack specifically, but
+# will with any other local Tyk/Postgres/Redis/Keycloak already using
+# their own standard ports) — run `./up.sh --dev-ports` to switch them to
+# a shifted (13000-style) set instead. These only affect reaching a
+# service from your own host machine's browser/curl/etc — the edp-migrate
+# service itself is a container on this same docker network, so its own
+# Setup wizard prefill (confs/edp-migrate.env) always addresses every
+# other service by its real internal docker service name + real internal
+# port, completely independent of *_HOST_PORT.
 services:
   tyk-postgres:
     image: postgres:18
@@ -13,15 +18,9 @@ services:
       - POSTGRES_PASSWORD=topsecretpassword
       - PGDATA=/var/lib/postgresql/18/docker
     ports:
-      - "${POSTGRES_HOST_PORT:-15432}:5432"
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql
-      # Only runs against a freshly-initialized (empty) data volume — creates
-      # the tyk_portal and keycloak databases that POSTGRES_DB above doesn't
-      # (see postgres-init/01-create-databases.sql). If you hit "mounts
-      # denied ... not shared from the host" on Docker Desktop, add this
-      # repo's path to Preferences > Resources > File Sharing, then retry.
-      - ./postgres-init:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
@@ -30,10 +29,48 @@ services:
     networks:
       - tyk
 
+  # One-shot: creates the tyk_portal and keycloak databases that
+  # POSTGRES_DB above doesn't (tyk-ent-portal and keycloak each need
+  # their own). Previously a postgres-init/ bind mount into Postgres's own
+  # docker-entrypoint-initdb.d, which only ever runs against a
+  # genuinely-fresh (empty) data volume — confirmed unreliable two
+  # different ways: Docker Desktop's file-sharing can refuse the bind
+  # mount outright ("mounts denied"), and even when the mount itself
+  # works, a volume that isn't perfectly fresh (e.g. reused from an
+  # interrupted earlier run) silently skips initdb.d forever, leaving
+  # both databases permanently missing with no error until tyk-ent-portal
+  # and keycloak crash-loop trying to connect. An explicit init
+  # container — depended on by both, same pattern as edp-migrate-init
+  # below — creates them itself over the network instead, idempotently
+  # (safe even if they already exist), independent of the volume's own
+  # history.
+  tyk-postgres-init:
+    image: postgres:18
+    environment:
+      - PGPASSWORD=topsecretpassword
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        set -e
+        for db in tyk_portal keycloak; do
+          exists=$$(psql -U postgres -h tyk-postgres -tAc "SELECT 1 FROM pg_database WHERE datname='$$db'")
+          if [ "$$exists" = "1" ]; then
+            echo "$$db already exists, skipping"
+          else
+            psql -U postgres -h tyk-postgres -c "CREATE DATABASE $$db"
+            echo "created $$db"
+          fi
+        done
+    depends_on:
+      tyk-postgres:
+        condition: service_healthy
+    networks:
+      - tyk
+
   tyk-redis:
     image: redis
     ports:
-      - "${REDIS_HOST_PORT:-16379}:6379"
+      - "${REDIS_HOST_PORT:-6379}:6379"
     volumes:
       - redis-data:/data
     networks:
@@ -42,7 +79,7 @@ services:
   tyk-gateway:
     image: tykio/tyk-gateway-ee:${GATEWAY_VERSION:-v5.13.2}
     ports:
-      - "${GATEWAY_HOST_PORT:-18080}:8080"
+      - "${GATEWAY_HOST_PORT:-8080}:8080"
     env_file:
       - ./confs/tyk.env
     depends_on:
@@ -60,7 +97,7 @@ services:
       tyk-postgres:
         condition: service_healthy
     ports:
-      - "${DASHBOARD_HOST_PORT:-13000}:3000"
+      - "${DASHBOARD_HOST_PORT:-3000}:3000"
     env_file:
       - ./confs/tyk_analytics.env
     networks:
@@ -71,12 +108,16 @@ services:
     user: root
     command: --bootstrap
     depends_on:
-      tyk-postgres:
-        condition: service_healthy
+      tyk-postgres-init:
+        condition: service_completed_successfully
     ports:
-      - "${PORTAL_HOST_PORT:-13001}:3001"
+      - "${PORTAL_HOST_PORT:-3001}:3001"
     environment:
       - PORTAL_LICENSEKEY=${DASH_LICENSE:?Dashboard license missing — copy .env.example to .env and set DASH_LICENSE (see README.md prerequisites)}
+      # Overrides confs/tyk_portal.env's own placeholder — up.sh generates
+      # a real value into .env on first run (see up.sh's own comment).
+      - ADMIN_EMAIL=${EDP_ADMIN_EMAIL:-admin@example-poc.dev}
+      - ADMIN_PASSWORD=${EDP_ADMIN_PASSWORD:-change-me-see-env-example}
     env_file:
       - ./confs/tyk_portal.env
     networks:
@@ -98,12 +139,12 @@ services:
   keycloak:
     image: keycloak/keycloak:${KEYCLOAK_VERSION:-latest}
     depends_on:
-      tyk-postgres:
-        condition: service_healthy
+      tyk-postgres-init:
+        condition: service_completed_successfully
     networks:
       - tyk
     ports:
-      - "${KEYCLOAK_HOST_PORT:-18180}:8180"
+      - "${KEYCLOAK_HOST_PORT:-8180}:8180"
     command:
       - start-dev
     environment:
@@ -120,7 +161,7 @@ services:
       # Must match the *host-side* port above (KEYCLOAK_HOST_PORT), not the
       # container's own internal 8180 — this is what browsers/curl from
       # outside the docker network actually use.
-      KC_HOSTNAME: http://localhost:${KEYCLOAK_HOST_PORT:-18180}
+      KC_HOSTNAME: http://localhost:${KEYCLOAK_HOST_PORT:-8180}
       # v2 hostname provider (Keycloak 26+): without this, a request that
       # arrives on a hostname other than KC_HOSTNAME (e.g. the classic
       # Dashboard calling a DCR registration endpoint via the internal
@@ -155,6 +196,21 @@ services:
     image: ${EDP_MIGRATE_IMAGE:-docker.io/ataimo007/edp-migrate:latest}
     ports:
       - "${EDP_MIGRATE_HOST_PORT:-9090}:9090"
+    # confs/edp-migrate.env prefills every component straight to its real
+    # internal docker service name + real internal port (edp-migrate is
+    # itself a container on this same "tyk" network, so it reaches every
+    # other service directly — this never needs to change even when this
+    # stack's own *_HOST_PORT values do, since a host-side port mapping
+    # doesn't apply to container-to-container traffic at all).
+    env_file:
+      - ./confs/edp-migrate.env
+    # Docker Desktop (Mac/Windows) resolves host.docker.internal inside a
+    # container automatically; plain Linux Docker needs this explicit
+    # mapping (Docker 20.10+) for the same DNS name to work there too —
+    # kept for anyone who sets the fallback EDP_MIGRATE_HOST themselves to
+    # reach something on the host machine instead of this docker stack.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - edp-migrate-data:/data
     depends_on:
@@ -164,6 +220,17 @@ services:
         condition: service_started
       tyk-ent-portal:
         condition: service_started
+    networks:
+      - tyk
+
+  # Real, working upstream for every API scripts/seed.sh creates (PROXY_TARGET,
+  # scripts/lib/apidef.sh) — reachable from tyk-gateway over this same docker
+  # network as http://httpbin:80, and from your own host (for a direct sanity
+  # check outside the Gateway) at HTTPBIN_HOST_PORT below.
+  httpbin:
+    image: kennethreitz/httpbin
+    ports:
+      - "${HTTPBIN_HOST_PORT:-8091}:80"
     networks:
       - tyk
 
