@@ -191,6 +191,29 @@ This repo is a one-way mirror of the `poc-environment/` directory in the
 core (private) `edp-migrate` tool repo — see that repo's own README for
 the tool's full design and source.
 
+## What's in this stack
+
+| Component | What it is | URL |
+|---|---|---|
+| Tyk Gateway | The API gateway/proxy every seeded API actually runs through | <http://localhost:8080> |
+| Tyk Dashboard | Management API + the **Classic Portal** you'll migrate from | <http://localhost:3000> |
+| Tyk Pump | Ships analytics from the Gateway into Postgres (no UI of its own) | — |
+| Enterprise Developer Portal (EDP) | The **migration target** | <http://localhost:3001> |
+| Keycloak | An external IdP, for exercising OpenID Connect/DCR scenarios | <http://localhost:8180> |
+| httpbin | The upstream every seeded API actually proxies to, so a migrated key has something real to call | <http://localhost:8091> |
+| Postgres | Storage for the Dashboard, EDP, and Keycloak (three separate databases, one instance) | localhost:5432 |
+| Redis | The Gateway's key store | localhost:6379 |
+| **edp-migrate** | The migration tool itself | <http://localhost:9090> |
+| Locust | Opt-in (`--load-test`) load runner — one worker per seeded developer key, generating real traffic through the Gateway | <http://localhost:8089> |
+
+Every port above is a plain/standard value — run `./up.sh --dev-ports` to
+shift them to a `13000`-style set instead if something else on your
+machine already uses one of these. `edp-migrate` itself is unaffected
+either way: it runs on this stack's own docker network and always
+reaches every other component by internal hostname and internal port
+(`confs/edp-migrate.env`), regardless of whatever `*_HOST_PORT` values
+you're using.
+
 ## Getting Started with the PoC Environment
 
 ### Prerequisites
@@ -248,15 +271,9 @@ to seed every classic auth type instead (the default), or see
 <http://localhost:9090>
 
 However, feel free to also inspect the other components and see what
-resources were generated/seeded:
-
-| Service | URL |
-|---|---|
-| Classic Dashboard | <http://localhost:3000> |
-| Enterprise Portal | <http://localhost:3001> |
-| Gateway | <http://localhost:8080> |
-| Keycloak | <http://localhost:8180> |
-| Locust (load test) | <http://localhost:8089> |
+resources were generated/seeded — see
+[**What's in this stack**](#whats-in-this-stack) above for the full URL
+list.
 
 Credentials for the developers that were created — along with their real
 API keys — can also be found in:
