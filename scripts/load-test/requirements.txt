@@ -1,0 +1,4 @@
+# Installed into the locustio/locust base image by ./Dockerfile — locust
+# itself is already in that base image, so only its own missing
+# dependency (locustfile.py's .seed-state/*.yaml parsing) needs adding.
+PyYAML>=6,<7

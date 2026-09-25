@@ -14,6 +14,34 @@ source scripts/lib/common.sh
 # shellcheck source=lib/keycloak.sh
 source scripts/lib/keycloak.sh
 
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  cat <<EOF
+Usage: $(basename "$0")
+
+One-time (idempotent) setup of a fresh Classic Dashboard organisation +
+admin API user on top of an already-running docker compose stack
+(docker-compose.yml at the repo root). Run this once after
+'docker compose up -d', before scripts/seed.sh — or just use ./up.sh,
+which runs both for you in order.
+
+Writes .runtime.env (gitignored) with DASHBOARD_URL/ADMIN_SECRET/ORG_ID/
+DASH_TOKEN — every other script in this directory sources it. Safe to
+re-run: if .runtime.env already has working credentials, this exits
+immediately without creating anything new (beyond the one-time
+tyk-dashboard restart below, if still needed). Takes no options.
+
+May restart the "tyk-dashboard" container once (docker compose restart
+tyk-dashboard, a few seconds of downtime) if the Classic Portal isn't
+being served yet — a confirmed tyk-analytics bug means its own portal
+routes only ever take effect at that container's own process startup,
+never on a live CNAME/config change, so this org's portal genuinely
+cannot come up without one restart after it's first created. See
+scripts/lib/classic_portal.sh's ensure_portal_routes_live for the full
+story. Skipped automatically once the portal is confirmed live.
+EOF
+  exit 0
+fi
+
 require_cmd curl jq docker
 
 DASHBOARD_URL="${DASHBOARD_URL:-http://localhost:${DASHBOARD_HOST_PORT:-3000}}"
@@ -43,6 +71,14 @@ if [[ -f "$RUNTIME_FILE" ]]; then
   check=$(dash GET /api/apis)
   if [[ "$(json_get "$check" '.apis // empty')" != "" || "$(json_get "$check" '.apis')" == "[]" ]]; then
     ok "existing credentials in $RUNTIME_FILE are still valid — nothing to bootstrap"
+    # ensure_cname is cheap and idempotent (a plain overwrite server-side)
+    # — run it even on this shortcut path, so an environment bootstrapped
+    # before this existed still picks it up on its next plain `up.sh`,
+    # without needing a full --fresh/down.sh teardown just for this.
+    # shellcheck source=lib/classic_portal.sh
+    source scripts/lib/classic_portal.sh
+    ensure_cname "${DASHBOARD_URL#http://}"
+    ensure_portal_routes_live
     exit 0
   fi
   warn "existing $RUNTIME_FILE credentials no longer work (stack was likely reset) — bootstrapping fresh"
@@ -125,10 +161,18 @@ source scripts/lib/apidef.sh
 source scripts/lib/classic_portal.sh
 
 ensure_portal_config
+# Strips DASHBOARD_URL's own scheme (http(s)://) — the CNAME field itself
+# is just host[:port], no scheme, confirmed via source (see ensure_cname's
+# own comment, lib/classic_portal.sh). Using DASHBOARD_URL's own host is
+# deliberate, not a hardcoded "localhost:3000": whatever address this
+# script itself just proved reachable enough to bootstrap through is also
+# the address the operator's own browser needs "Open Portal" to point at.
+ensure_cname "${DASHBOARD_URL#http://}"
 ensure_menus
 ensure_css
 ensure_js
 ensure_homepage
+ensure_portal_routes_live
 
 cat >&2 <<EOF
 

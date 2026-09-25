@@ -20,6 +20,15 @@ set -uo pipefail
 # environment this stack runs in.
 PROXY_TARGET="${PROXY_TARGET:-http://httpbin/}"
 
+# Every seeded API's own enable_detailed_recording flag (apidef/
+# api_definitions.go) — full request/response bodies captured in
+# analytics, not just method/path/status. On by default: this is a POC/
+# test tool, and being able to actually see what the load runner (or any
+# manual curl) sent/got back in the Dashboard's own Activity Log is more
+# useful here than the storage/perf cost real production traffic would
+# incur. seed.sh's own --no-detailed-recording flips this off.
+DETAILED_RECORDING="${DETAILED_RECORDING:-true}"
+
 # build_apidef NAME LISTEN_PATH AUTH_TYPE — prints the api_definition JSON.
 build_apidef() {
   local name="$1" listen_path="$2" auth_type="$3"
@@ -28,6 +37,7 @@ build_apidef() {
     --arg name "$name" \
     --arg target "$PROXY_TARGET" \
     --arg listen_path "$listen_path" \
+    --argjson detailed_recording "$DETAILED_RECORDING" \
     '{
       name: $name,
       active: true,
@@ -38,6 +48,7 @@ build_apidef() {
         not_versioned: true,
         versions: { Default: { name: "Default", use_extended_paths: true } }
       },
+      enable_detailed_recording: $detailed_recording,
       use_keyless: false,
       use_standard_auth: false,
       use_basic_auth: false,

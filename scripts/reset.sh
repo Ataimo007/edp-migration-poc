@@ -23,11 +23,43 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 source scripts/lib/common.sh
 require_cmd yq
 
+usage() {
+  cat <<EOF
+Usage: $(basename "$0") [--full]
+
+No args (default): removes everything scripts/seed.sh has ever created
+on the CLASSIC PORTAL side only (every developer, API, policy, and
+pending request recorded in .seed-state/run-*.yaml|json), leaving the
+org, admin user, and portal config from bootstrap.sh intact so you can
+reseed immediately.
+
+  --full   tear down the whole docker compose stack instead: every
+           container AND volume (Postgres/Redis/Portal data, EDP's
+           database, the edp-migrate /data volume) — irreversible, and
+           the only reliable way to also clear anything already
+           migrated into EDP (see this script's own header comment for
+           why the default mode can't do that). Prompts for
+           confirmation before deleting anything.
+  -h, --help   this help
+EOF
+}
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  usage
+  exit 0
+fi
+
 if [[ "${1:-}" == "--full" ]]; then
   warn "docker compose down -v: this deletes every container AND volume (Postgres/Redis/Portal data, EDP's database, the edp-migrate /data volume) — irreversible, and the only reliable way to also clear anything already migrated into EDP."
   read -r -p "Type \"yes\" to proceed: " confirm
   [[ "$confirm" == "yes" ]] || { info "aborted — nothing was changed"; exit 0; }
-  docker compose down -v
+  # --profile seed --profile load-test: `down` only tears down containers
+  # for services whose profile was active in *this* invocation — without
+  # naming every profile this compose file defines, a "locust" (or
+  # "seed") container started in an earlier --load-test session survives
+  # a plain `down -v` entirely, live and still consuming its container
+  # slot/port, confirmed live this was a real gap.
+  docker compose --profile seed --profile load-test down -v
   rm -f .runtime.env
   rm -rf .seed-state
   ok "stack torn down and all seed state cleared"

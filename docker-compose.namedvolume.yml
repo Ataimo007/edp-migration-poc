@@ -1,0 +1,37 @@
+# docker-compose.namedvolume.yml — switches the "seed"/"locust" services'
+# shared .seed-state/ from docker-compose.yml's own default (a plain host
+# bind mount at poc-environment/.seed-state/) to a named Docker volume
+# instead. Applied via `./up.sh --seed-state-volume`, or directly:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.namedvolume.yml ...
+#
+# Only needed where a host bind mount doesn't work: some devcontainer/
+# remote setups run Docker via a forwarded socket to a *different*
+# machine's Docker daemon (Docker-outside-of-Docker), which only shares
+# whatever host paths that other machine's own Docker Desktop was
+# configured to share (its own "Preferences -> Resources -> File Sharing"
+# list) — never this checkout's own location on whatever machine the
+# devcontainer itself actually runs on. Confirmed live in exactly that
+# kind of environment: every path tried as a bind mount (this directory,
+# .seed-state alone, even /tmp) failed identically with "mounts denied
+# ... not shared from the host". A named volume sidesteps that
+# entirely — it's managed inside the Docker daemon's own storage, not a
+# host filesystem path at all, so two containers sharing one has nothing
+# to do with host file-sharing permissions.
+#
+# The trade-off: run-*.yaml|json files no longer show up directly at
+# poc-environment/.seed-state/ on your own machine — use
+# scripts/seed-state.sh instead (it already reads from this same named
+# volume automatically once this override is in effect).
+services:
+  seed:
+    environment:
+      - SEED_STATE_VOLUME=1
+    volumes:
+      - seed-state:/poc-environment/.seed-state
+  locust:
+    volumes:
+      - seed-state:/poc-environment/.seed-state
+
+volumes:
+  seed-state:

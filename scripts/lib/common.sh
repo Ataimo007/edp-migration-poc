@@ -28,18 +28,69 @@ fi
 
 _c_reset=$'\033[0m'; _c_dim=$'\033[2m'; _c_red=$'\033[31m'; _c_green=$'\033[32m'; _c_yellow=$'\033[33m'; _c_blue=$'\033[34m'
 
-log()  { printf '%s\n' "$*" >&2; }
-info() { printf '%s[*]%s %s\n' "$_c_blue" "$_c_reset" "$*" >&2; }
-ok()   { printf '%s[OK]%s %s\n' "$_c_green" "$_c_reset" "$*" >&2; }
-warn() { printf '%s[!]%s %s\n' "$_c_yellow" "$_c_reset" "$*" >&2; }
-err()  { printf '%s[x]%s %s\n' "$_c_red" "$_c_reset" "$*" >&2; }
+# _progress_bar_active tracks whether progress_bar (below) has the cursor
+# sitting mid-line, redrawing in place — every other log line here checks
+# it first and, if set, emits a newline to move off that line before
+# printing its own, so a warn()/err() firing mid-progress-bar never gets
+# mashed onto the end of the bar's own text instead of starting cleanly at
+# column 0.
+_progress_bar_active=0
+_progress_bar_clear_if_active() {
+  if [[ "$_progress_bar_active" == "1" ]]; then
+    printf '\n' >&2
+    _progress_bar_active=0
+  fi
+}
+
+log()  { _progress_bar_clear_if_active; printf '%s\n' "$*" >&2; }
+info() { _progress_bar_clear_if_active; printf '%s[*]%s %s\n' "$_c_blue" "$_c_reset" "$*" >&2; }
+ok()   { _progress_bar_clear_if_active; printf '%s[OK]%s %s\n' "$_c_green" "$_c_reset" "$*" >&2; }
+warn() { _progress_bar_clear_if_active; printf '%s[!]%s %s\n' "$_c_yellow" "$_c_reset" "$*" >&2; }
+err()  { _progress_bar_clear_if_active; printf '%s[x]%s %s\n' "$_c_red" "$_c_reset" "$*" >&2; }
 die()  { err "$*"; exit 1; }
-verbose() { [[ "${VERBOSE:-0}" == "1" ]] && printf '%s    %s%s\n' "$_c_dim" "$*" "$_c_reset" >&2; return 0; }
+verbose() { [[ "${VERBOSE:-0}" == "1" ]] && { _progress_bar_clear_if_active; printf '%s    %s%s\n' "$_c_dim" "$*" "$_c_reset" >&2; }; return 0; }
 
 require_cmd() {
   for c in "$@"; do
     command -v "$c" >/dev/null 2>&1 || die "required command not found: $c (see README.md prerequisites)"
   done
+}
+
+# ---- live progress bar ------------------------------------------------------
+# A long seed.sh run used to only ever print one "ok" line per resource —
+# fine at --scale small, unreadable scrollback at medium/large with nothing
+# to glance at for "is this stuck or just slow". progress_bar redraws a
+# single line in place instead (a bar + percentage + a caption naming
+# whatever operation just started), and progress_bar_done moves off that
+# line once the run reaches its last step so real log output afterward
+# (the final summary, a die()) starts on its own fresh line.
+#
+# Skipped entirely under --verbose: that mode already prints every API
+# call/response as its own permanent line, and a redrawing bar interleaved
+# with that would just get garbled rather than adding anything.
+_progress_bar_width=30
+progress_bar() { # progress_bar CURRENT TOTAL LABEL
+  [[ "${VERBOSE:-0}" == "1" ]] && return
+  local current="$1" total="$2" label="$3"
+  (( total <= 0 )) && total=1
+  (( current > total )) && current=$total
+  local filled=$(( current * _progress_bar_width / total ))
+  local empty=$(( _progress_bar_width - filled ))
+  local pct=$(( current * 100 / total ))
+  local bar
+  bar="$(printf '%*s' "$filled" '' | tr ' ' '#')$(printf '%*s' "$empty" '' | tr ' ' '-')"
+  # \r returns to column 0 without a newline (so the next call overwrites
+  # this same line); \033[K clears to end of line so a shorter label never
+  # leaves stray characters from a longer previous one trailing after it.
+  printf '\r\033[K%s[%s]%s %3d%% (%d/%d) %s' "$_c_blue" "$bar" "$_c_reset" "$pct" "$current" "$total" "$label" >&2
+  _progress_bar_active=1
+}
+
+# progress_bar_done — call once after the last progress_bar update.
+progress_bar_done() {
+  [[ "${VERBOSE:-0}" == "1" ]] && return
+  printf '\n' >&2
+  _progress_bar_active=0
 }
 
 # ---- waiting on HTTP services ---------------------------------------------

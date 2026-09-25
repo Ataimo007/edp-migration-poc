@@ -93,6 +93,15 @@ services:
       - TYK_DB_LICENSEKEY=${DASH_LICENSE:?Dashboard license missing — copy .env.example to .env and set DASH_LICENSE (see README.md prerequisites)}
       - TYK_DB_STORAGE_MAIN_TYPE=postgres
       - TYK_DB_STORAGE_MAIN_CONNECTIONSTRING=user=postgres password=topsecretpassword host=tyk-postgres port=5432 database=tyk_analytics
+      # Overrides confs/tyk_analytics.env's own checked-in
+      # TYK_DB_HOSTCONFIG_GATEWAYHOSTNAME=localhost:18080 (environment:
+      # always wins over env_file, regardless of listed order) — that
+      # value drives the "API URL" this stack's own catalogue/seed output
+      # shows an operator to actually call, so it needs to track this same
+      # run's real GATEWAY_HOST_PORT (plain 8080 by default, 18080 only
+      # under --dev-ports) instead of being stuck at one hardcoded value
+      # forever regardless of which ports this run is actually using.
+      - TYK_DB_HOSTCONFIG_GATEWAYHOSTNAME=localhost:${GATEWAY_HOST_PORT:-8080}
     depends_on:
       tyk-postgres:
         condition: service_healthy
@@ -231,6 +240,114 @@ services:
     image: kennethreitz/httpbin
     ports:
       - "${HTTPBIN_HOST_PORT:-8091}:80"
+    networks:
+      - tyk
+
+  # Seeds Classic Portal — scripts/seed.sh's own logic, running in its own
+  # container instead of this devcontainer's own host shell, specifically
+  # so its output lands somewhere the "locust" service below can also see
+  # it.
+  #
+  # By default that's a plain host bind mount — poc-environment/.seed-state/
+  # on your own machine, directly, no indirection — which is what you want
+  # on a normal local Docker install. `./up.sh --seed-state-volume` (or
+  # `-f docker-compose.yml -f docker-compose.namedvolume.yml` directly)
+  # switches both this service and "locust" to a named Docker volume
+  # instead, for the one case a host bind mount doesn't work: some
+  # devcontainer/remote setups run Docker via a forwarded socket to a
+  # *different* machine's Docker daemon (Docker-outside-of-Docker), which
+  # only shares whatever host paths that other machine's own Docker
+  # Desktop was configured to share — never this checkout's own location.
+  # Confirmed live in exactly that kind of environment: every path tried
+  # (this directory, .seed-state alone, even /tmp) failed identically with
+  # "mounts denied ... not shared from the host". docker-compose.namedvolume.yml's
+  # own comment has the full story; scripts/seed-state.sh reads that named
+  # volume from the host when this flag is in use.
+  #
+  # Never started by a plain `docker compose up -d` (see its own
+  # "profiles:" below) — ./up.sh invokes it explicitly instead, right
+  # after scripts/bootstrap.sh:
+  #
+  #   docker compose run --rm seed --scale medium --auth-types authToken,basic
+  #
+  # env_file reads .env/.runtime.env straight off this devcontainer's own
+  # disk at `docker compose run` time (the compose CLI parses those files
+  # itself — no bind mount involved, so none of the sharing restriction
+  # above applies to this part at all) — DASHBOARD_URL is the one
+  # override needed on top: .runtime.env's own value is the host-
+  # published port bootstrap.sh verified from *outside* the stack, but
+  # this container has no host-port mapping of its own to reach back
+  # through, only the internal network every other container already
+  # uses.
+  seed:
+    profiles: ["seed"]
+    build:
+      context: .
+      dockerfile: scripts/seed/Dockerfile
+    env_file:
+      - .env
+      - .runtime.env
+    environment:
+      - DASHBOARD_URL=http://tyk-dashboard:3000
+      # Overridden to 1 by docker-compose.namedvolume.yml — lets seed.sh's
+      # own closing summary tell the operator the right way to read
+      # .seed-state/ (a direct host path by default, scripts/seed-state.sh
+      # under that overlay) without needing to guess which mount is live.
+      - SEED_STATE_VOLUME=0
+    volumes:
+      - ./.seed-state:/poc-environment/.seed-state
+    depends_on:
+      - tyk-dashboard
+    networks:
+      - tyk
+
+  # Load-tests the APIs the "seed" service above creates, using the real
+  # developer keys it issued — scripts/load-test/README.md has the full
+  # story. Autostarts (entrypoint.sh's own --autostart) the moment it
+  # comes up, one worker per available developer key — open
+  # http://localhost:${LOCUST_HOST_PORT:-8089} any time just to watch it.
+  #
+  # NOT part of the always-up stack (see its own "profiles:" below) —
+  # opt in with `./up.sh --load-test`, since it generates real, continuous
+  # traffic against the Gateway the moment it starts. LOAD_TEST_RPS (per
+  # worker, not aggregate — see locustfile.py's own wait_time) defaults
+  # to 0.5, the same pace this always ran at before rate/quota became
+  # separately configurable — safe now against a day of continuous
+  # traffic because scripts/seed.sh's own --quota-min default is high
+  # enough to absorb it (see that script's own comment on the exact
+  # numbers), not because this got throttled down.
+  #
+  # entrypoint.sh waits for a .seed-state/run-*.yaml|json file to show up
+  # (see "seed" service's own comment on where that actually lives — a
+  # host bind mount by default, a named volume under --seed-state-volume)
+  # before starting Locust for real, since this container starts (with
+  # `docker compose up -d`) *before* up.sh gets around to running the
+  # "seed" service above — there's a real race here otherwise. Because
+  # that mount is genuinely live and shared with "seed" (not a one-time
+  # copy), re-seeding after this container is already up still needs a
+  # restart to pick up the new file — Locust only loads credentials once,
+  # at its own startup, this doesn't change that — but the *file itself*
+  # is visible immediately, with no copy step of any kind:
+  #
+  #   docker compose restart locust
+  #
+  # Reaches tyk-gateway over this same internal network (the "seed"
+  # service's own recorded "internal_url" per API, http://tyk-gateway:8080/...)
+  # — never a host-published port, so this works the same regardless of
+  # --dev-ports or any other *_HOST_PORT override.
+  locust:
+    profiles: ["load-test"]
+    build:
+      context: ./scripts/load-test
+    ports:
+      - "${LOCUST_HOST_PORT:-8089}:8089"
+    environment:
+      - SEED_STATE_FILE=${SEED_STATE_FILE:-}
+      - LOAD_TEST_RPS=${LOAD_TEST_RPS:-0.5}
+    volumes:
+      - ./.seed-state:/poc-environment/.seed-state
+    depends_on:
+      - tyk-gateway
     networks:
       - tyk
 
