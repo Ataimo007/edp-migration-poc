@@ -349,9 +349,7 @@ testing:
 `authToken` is the only type this specific POC repository has been used
 to test so far (`--auth-types authToken` above); every other row reflects
 what the tool implements and how it's classified, not a claim that
-someone has run it through this exact repo. See the core tool's own
-README for its own, separately-tracked live-test coverage across all nine
-types.
+someone has run it through this exact repo.
 
 ## Distribution Channels and links
 
