@@ -75,6 +75,23 @@ tracked in an append-only ledger, a migration can be planned, previewed,
 executed, checked, and — right up until Decommission — rolled back, with
 nothing depending on a human remembering what happened in which order.
 
+**Every catalogue entry becomes a Product + Plan either way — how they're
+organized in EDP's own Catalogue is a choice made on the Migration
+Configure step:**
+
+- **Dedicated Catalogue per entry** (default, recommended) — each classic
+  catalogue entry gets its own public EDP Catalogue, holding an exact-match
+  Product (ACL partition) and Plan (rate/quota partition): no rounding, no
+  sharing.
+- **Shared Catalogue, tiered Plans** — every entry publishes into one
+  operator-picked Catalogue, with Plans grouped into a handful of
+  rate/quota tiers (the classic "free/basic/standard/premium" shape). Each
+  entry is rounded **up** to the smallest tier that covers its own rate
+  *and* quota — never down, and never on rate alone.
+
+DCR-eligible and documentation-only catalogue entries always publish into
+the one shared Catalogue regardless of which strategy is active.
+
 This repository is the demo/POC environment for that tool. Read on for
 how to install `edp-migrate` itself, or jump straight to
 [**Getting Started with the PoC Environment**](#getting-started-with-the-poc-environment)
@@ -103,7 +120,7 @@ curl -fsSL "https://packages.buildkite.com/ataimo-edem/edp-migration/gpgkey" \
 echo -e "deb [signed-by=/etc/apt/keyrings/ataimo-edem_edp-migration-archive-keyring.gpg] https://packages.buildkite.com/ataimo-edem/edp-migration/any/ any main\ndeb-src [signed-by=/etc/apt/keyrings/ataimo-edem_edp-migration-archive-keyring.gpg] https://packages.buildkite.com/ataimo-edem/edp-migration/any/ any main" \
   > /etc/apt/sources.list.d/buildkite-ataimo-edem-edp-migration.list
 
-apt update && apt install edp-migrate=0.3.0
+apt update && apt install edp-migrate=0.4.2
 ```
 
 **RHEL/Fedora/CentOS** — [package registry](https://buildkite.com/organizations/ataimo-edem/packages/registries/edp-migration-rpm):
@@ -111,14 +128,19 @@ apt update && apt install edp-migrate=0.3.0
 ```sh
 sudo sh -c 'echo -e "[edp-migration-rpm]\nname=edp-migration-rpm\nbaseurl=https://packages.buildkite.com/ataimo-edem/edp-migration-rpm/rpm_any/rpm_any/$basearch\nenabled=1\nrepo_gpgcheck=1\ngpgcheck=0\ngpgkey=https://packages.buildkite.com/ataimo-edem/edp-migration-rpm/gpgkey\npriority=1"' > /etc/yum.repos.d/edp-migration-rpm.repo
 
-dnf install -y edp-migrate-0.3.0-1.x86_64
+dnf install -y edp-migrate-0.4.2-1.$(uname -m)
 ```
 
-Both snippets install `0.3.0` specifically — check the registry's own page
+Both snippets install `0.4.2` specifically — check the registry's own page
 (linked above) for the exact command for whatever the current latest
 version is, since the version number is baked into both the `apt install`
 and `dnf install` command themselves, not something either package manager
-resolves to "latest" on its own.
+resolves to "latest" on its own. The RPM package name embeds the CPU
+architecture (`$(uname -m)` resolves it for you); `apt`'s own multi-arch
+package pool needs no equivalent, since `edp-migrate=0.4.2` alone is
+architecture-agnostic — confirmed live: the same literal `x86_64` this
+snippet used to hardcode failed outright on a real ARM64 RHEL/Fedora host
+with "no match for argument."
 
 ### `docker run`
 

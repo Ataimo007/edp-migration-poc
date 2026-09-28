@@ -82,7 +82,26 @@ something goes wrong later (Postgres/Mongo table dumps are reference
 snapshots, not a restorable `pg_dump`/`mongodump` equivalent — see the
 tool's own `internal/backup` docs for why).
 
-## Phase 3 — Migration (`plan` / `execute`)
+## Phase 3 — Migration (Configure, then `plan` / `execute`)
+
+Before running either command below, open the web UI's own **Migration →
+Configure** page (`http://localhost:9090`, or the host-mapped port if
+you're not running `edp-migrate` inside this stack's own network) — it's
+where the catalogue-mapping strategy, Plan tier count, auto-approve
+behaviour, Organisation/Team, and admin-user/TIB opt-ins are all set
+before either CLI command reads them. The two catalogue-mapping choices:
+
+- **Dedicated Catalogue per entry** (default, badged "Recommended") —
+  each seeded catalogue entry gets its own public EDP Catalogue, holding
+  an exact-match Product and Plan. Picking this hides the Plan-tiering and
+  Catalogue-selection fields entirely, since neither applies.
+- **Shared Catalogue, tiered Plans** — every entry publishes into one
+  Catalogue you pick, with Plans grouped into a tier count you choose (no
+  upper limit) — each seeded entry rounded **up** to the smallest tier
+  that covers its own rate *and* quota. [SEEDING_GUIDE.md](SEEDING_GUIDE.md)'s
+  "Rate/quota tiers are deliberately varied" note explains why this stack
+  seeds varied rate/quota profiles specifically to make this strategy's
+  multi-tier output worth looking at.
 
 ```sh
 docker compose exec edp-migrate edp-migrate plan     # dry run — writes a plan, changes nothing
@@ -98,6 +117,12 @@ Access Requests. `execute` is safely re-runnable — anything already
 recorded in the tool's ledger (`.edp-migrate`/ledger, inside the
 container's `/data` volume) is skipped on a second run, so you can fix a
 partial failure and run it again rather than starting over.
+
+Each phase's own **Failed Items** card (alongside its regular
+per-resource-type cards) lists exactly which resources failed, if any —
+name, resource-type badge, and (for a Product/Plan/Catalogue/Policy/Key)
+an auth-type badge — rather than just a bare failed count. Available on
+Migration, Cutover, Cutover Rollback, Decommission, and Rollback alike.
 
 ## Phase 4 — Report
 

@@ -93,10 +93,17 @@ logic, not something you can proxy real mTLS traffic through.
 ### Rate/quota tiers are deliberately varied
 
 Every seeded policy cycles through one of three different rate/quota
-profiles. This matters: `edp-migrate`'s plan-tier computation collapses
+profiles. This matters specifically for the **shared Catalogue, tiered
+Plans** strategy (`edp-migrate`'s two catalogue-mapping strategies — see
+the main [README](../README.md)): its plan-tier computation collapses
 every classic policy into a single "Standard" tier if they all share the
-same rate/quota (confirmed live) — real variance is what makes the
-Migration phase's multi-tier output worth looking at.
+same rate/quota (confirmed live) — real variance is what makes that
+strategy's multi-tier output, and its round-up-not-down tier assignment,
+worth looking at. The **dedicated Catalogue per entry** strategy (the
+default) doesn't need this variance to be interesting — every entry gets
+its own exact-match Plan regardless — but the varied profiles are still
+useful there too, just to see genuinely different Plans created rather
+than N identical ones.
 
 ### Basic Auth's admin-issued key response
 
