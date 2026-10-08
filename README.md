@@ -120,7 +120,7 @@ curl -fsSL "https://packages.buildkite.com/ataimo-edem/edp-migration/gpgkey" \
 echo -e "deb [signed-by=/etc/apt/keyrings/ataimo-edem_edp-migration-archive-keyring.gpg] https://packages.buildkite.com/ataimo-edem/edp-migration/any/ any main\ndeb-src [signed-by=/etc/apt/keyrings/ataimo-edem_edp-migration-archive-keyring.gpg] https://packages.buildkite.com/ataimo-edem/edp-migration/any/ any main" \
   > /etc/apt/sources.list.d/buildkite-ataimo-edem-edp-migration.list
 
-apt update && apt install edp-migrate=0.4.2
+apt update && apt install edp-migrate
 ```
 
 **RHEL/Fedora/CentOS** — [package registry](https://buildkite.com/organizations/ataimo-edem/packages/registries/edp-migration-rpm):
@@ -128,19 +128,23 @@ apt update && apt install edp-migrate=0.4.2
 ```sh
 sudo sh -c 'echo -e "[edp-migration-rpm]\nname=edp-migration-rpm\nbaseurl=https://packages.buildkite.com/ataimo-edem/edp-migration-rpm/rpm_any/rpm_any/$basearch\nenabled=1\nrepo_gpgcheck=1\ngpgcheck=0\ngpgkey=https://packages.buildkite.com/ataimo-edem/edp-migration-rpm/gpgkey\npriority=1"' > /etc/yum.repos.d/edp-migration-rpm.repo
 
-dnf install -y edp-migrate-0.4.2-1.$(uname -m)
+dnf install -y edp-migrate
 ```
 
-Both snippets install `0.4.2` specifically — check the registry's own page
-(linked above) for the exact command for whatever the current latest
-version is, since the version number is baked into both the `apt install`
-and `dnf install` command themselves, not something either package manager
-resolves to "latest" on its own. The RPM package name embeds the CPU
-architecture (`$(uname -m)` resolves it for you); `apt`'s own multi-arch
-package pool needs no equivalent, since `edp-migrate=0.4.2` alone is
-architecture-agnostic — confirmed live: the same literal `x86_64` this
-snippet used to hardcode failed outright on a real ARM64 RHEL/Fedora host
-with "no match for argument."
+Both snippets above always install whatever the latest published version
+is — confirmed live against the real repo metadata (every version from
+0.1.3 through the current one is listed under the one unchanging package
+name `edp-migrate`, version as its own separate field): `apt`/`dnf`
+resolve a bare package name to its highest available version on their
+own, no `=X.Y.Z` or version number needed in the command at all, the same
+way `docker run ...edp-migrate:latest` does for the Docker image. To pin
+an exact version instead (for reproducibility — e.g. in a Dockerfile or
+provisioning script), add it explicitly: `apt install edp-migrate=X.Y.Z`
+(architecture-agnostic on its own), or
+`dnf install -y edp-migrate-X.Y.Z-1.$(uname -m)` — the RPM package name
+embeds the CPU architecture, so `$(uname -m)` resolves it for you;
+confirmed live that hardcoding a literal `x86_64` there instead fails
+outright on a real ARM64 host with "no match for argument."
 
 ### `docker run`
 
