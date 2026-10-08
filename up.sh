@@ -47,6 +47,16 @@ Options:
                values with the flag, plain defaults without it) — never a
                one-way switch that leaves an earlier run's choice stuck
                until manually undone.
+  --hash-keys true|false   set both the Gateway's and Classic Dashboard's
+               hash_keys deployment setting (TYK_GW_HASHKEYS/
+               TYK_DB_HASHKEYS) — true (the default, matching the
+               overwhelmingly common real-world deployment) stores keys
+               in Redis as a hash; false stores them as their raw
+               plaintext value, for testing edp-migrate's own
+               hash_keys:false key-adoption strategy. Every run sets
+               .env's HASH_KEYS one way or the other (never a one-way
+               switch an earlier run's choice stays stuck at until
+               manually undone), same convention as --dev-ports above.
   --dev        core-tool development only: build edp-migrate from this
                repo's own local source (docker-compose.dev.yml) instead
                of pulling the published EDP_MIGRATE_IMAGE, so an
@@ -102,6 +112,7 @@ usage() {
 }
 
 DEV_PORTS=0
+HASH_KEYS_FLAG="true"
 DEV_BUILD=0
 LOAD_TEST=0
 LOAD_TEST_RPS=""
@@ -124,6 +135,13 @@ while [[ $# -gt 0 ]]; do
     -h|--help) usage; exit 0 ;;
     --fresh) FRESH=1; shift ;;
     --dev-ports) DEV_PORTS=1; shift ;;
+    --hash-keys)
+      case "${2:-}" in
+        true|false) HASH_KEYS_FLAG="$2" ;;
+        *) die "--hash-keys needs 'true' or 'false', got '${2:-}'" ;;
+      esac
+      shift 2
+      ;;
     --dev) DEV_BUILD=1; shift ;;
     --load-test) LOAD_TEST=1; shift ;;
     --load-test-rps) LOAD_TEST_RPS="$2"; LOAD_TEST=1; shift 2 ;;
@@ -233,6 +251,20 @@ else
     -e "s/^REDIS_HOST_PORT=.*/REDIS_HOST_PORT=6379/" \
     -e "s/^KEYCLOAK_HOST_PORT=.*/KEYCLOAK_HOST_PORT=8180/" \
     .env && rm -f .env.bak
+fi
+
+# Always sets .env's HASH_KEYS explicitly (default "true" if --hash-keys
+# wasn't given at all) — same "never a one-way switch stuck until manually
+# undone" reasoning as --dev-ports above: without this, an earlier
+# `--hash-keys false` run's choice would silently stick around forever on
+# every later plain `./up.sh`.
+if grep -q "^HASH_KEYS=" .env 2>/dev/null; then
+  sed -i.bak "s/^HASH_KEYS=.*/HASH_KEYS=${HASH_KEYS_FLAG}/" .env && rm -f .env.bak
+else
+  echo "HASH_KEYS=${HASH_KEYS_FLAG}" >> .env
+fi
+if [[ "$HASH_KEYS_FLAG" == "false" ]]; then
+  info "--hash-keys false: Gateway/Dashboard will store keys unhashed (raw value in Redis)"
 fi
 
 # Re-source now that .env definitely exists (and may have just changed) —

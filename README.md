@@ -400,6 +400,11 @@ Hub and Buildkite are the two channels usable with no repo access at all.
 # something else already running on your machine:
 ./up.sh --dev-ports
 
+# Deploy with the Gateway/Classic Dashboard storing keys unhashed (raw
+# value in Redis) instead of the default hashed storage — for testing
+# edp-migrate's own hash_keys:false key-adoption strategy:
+./up.sh --hash-keys false
+
 # Reseed at a larger scale without restarting the stack:
 scripts/seed.sh --scale large
 
