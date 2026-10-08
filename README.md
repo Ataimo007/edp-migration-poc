@@ -131,20 +131,10 @@ sudo sh -c 'echo -e "[edp-migration-rpm]\nname=edp-migration-rpm\nbaseurl=https:
 dnf install -y edp-migrate
 ```
 
-Both snippets above always install whatever the latest published version
-is — confirmed live against the real repo metadata (every version from
-0.1.3 through the current one is listed under the one unchanging package
-name `edp-migrate`, version as its own separate field): `apt`/`dnf`
-resolve a bare package name to its highest available version on their
-own, no `=X.Y.Z` or version number needed in the command at all, the same
-way `docker run ...edp-migrate:latest` does for the Docker image. To pin
-an exact version instead (for reproducibility — e.g. in a Dockerfile or
-provisioning script), add it explicitly: `apt install edp-migrate=X.Y.Z`
-(architecture-agnostic on its own), or
-`dnf install -y edp-migrate-X.Y.Z-1.$(uname -m)` — the RPM package name
-embeds the CPU architecture, so `$(uname -m)` resolves it for you;
-confirmed live that hardcoding a literal `x86_64` there instead fails
-outright on a real ARM64 host with "no match for argument."
+Both commands always install the latest published version. To pin an
+exact one instead, use `apt install edp-migrate=X.Y.Z` or
+`dnf install -y edp-migrate-X.Y.Z-1.$(uname -m)` (RPM packages are
+architecture-specific, so `$(uname -m)` fills that in for you).
 
 ### `docker run`
 
